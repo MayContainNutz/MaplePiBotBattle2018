@@ -61,7 +61,7 @@ int main() {
     while (true) {
         // The API is "object-oriented" - most methods take pointers to some object.
         uint32_t round = bc_GameController_round(gc);
-        printf("Round: %d\n", round);
+        //printf("Round: %d\n", round);
 
         // Note that all operations perform copies out of their data structures, returning new objects.
         // You're responsible for freeing objects.

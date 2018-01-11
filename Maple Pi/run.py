@@ -2,86 +2,182 @@ import battlecode as bc
 import sys
 import traceback
 import time
+
+import pathFinding
+#TODO: remove random and use intelligent pathing
 import random
-import pathspeedtest
 
+#build my environment
 gc = bc.GameController()
-#directions = list(bc.Direction)
-directions = [bc.Direction.Northeast, bc.Direction.Northwest, bc.Direction.Southeast, bc.Direction.Southwest]
+directions = list(bc.Direction)
 
+#get the starting map
 myMap = gc.starting_map(gc.planet())
-pathspeedtest.pathPlanetMap(myMap)
-#eg research code
-gc.queue_research(bc.UnitType.Rocket)
-#gc.queue_research(bc.UnitType.Worker)
-#gc.queue_research(bc.UnitType.Knight)
+#processes it into an int field
+pathFinding.pathPlanetMap(myMap)
 
-
-random.seed(6137)
-
+#get my team name
 my_team = gc.team()
 
+#get the details of the orbit
 orbit = gc.orbit_pattern()
 
+#TOTO:research, currently only gets the first level of rockets
+gc.queue_research(bc.UnitType.Rocket)
 
-while True:
+#count my starting units, and find out where the enemy spawned
+enemyx = 0
+enemyy = 0
+myStartingUnits = 0
+#TODO:account for starting off world
+for unit in myMap.initial_units:
+    if unit.team != my_team:
+        enemyLocation = unit.location
+        enemyx = enemyLocation.map_location().x
+        enemyy = enemyLocation.map_location().y
+        continue
+    if unit.team == my_team:
+        myStartingUnits += 1
+        continue
 
-    # frequent try/catches are a good idea
-    try:
+#enemyx,enemyy is the starting locations of(at least one) of the enemies bots
+#I am making the assumption that they stay near there
 
-        # walk through our units:
-        for unit in gc.my_units():
 
-            # first, factory logic
-            if unit.unit_type == bc.UnitType.Factory:
-                garrison = unit.structure_garrison()
-                if len(garrison) > 0:
-                    d = random.choice(directions)
-                    if gc.can_unload(unit.id, d):
-                        print('unloaded a knight!')
-                        gc.unload(unit.id, d)
-                        continue
-                elif gc.can_produce_robot(unit.id, bc.UnitType.Knight):
-                    gc.produce_robot(unit.id, bc.UnitType.Knight)
-                    print('produced a knight!')
-                    continue
+#print(myMap.initial_units)
+#unit counters init
+numFactories = 0
+numRockets = 0
+numWorkers = 0
+numKnights = 0
+numRangers = 0
+numMages = 0
+numHealers = 0
+factoryCount = 0
+rocketCount = 0
+workerCount = myStartingUnits
+knightCount = 0
+rangerCount = 0
+mageCount = 0
+healerCount = 0
 
-            # first, let's look for nearby blueprints to work on
-            location = unit.location
-            if location.is_on_map():
-                nearby = gc.sense_nearby_units(location.map_location(), 2)
-                for other in nearby:
-                    if unit.unit_type == bc.UnitType.Worker and gc.can_build(unit.id, other.id):
-                        gc.build(unit.id, other.id)
-                        print('built a factory!')
-                        # move onto the next unit
-                        continue
-                    if other.team != my_team and gc.is_attack_ready(unit.id) and gc.can_attack(unit.id, other.id):
-                        print('attacked a thing!')
-                        gc.attack(unit.id, other.id)
-                        continue
+#logic for each unit type
+def factoryLogic():
+    m=1
+    return
 
-            # okay, there weren't any dudes around
-            # pick a random direction:
-            d = random.choice(directions)
-            if unit.unit_type == bc.UnitType.Worker and not gc.can_blueprint(unit.id, bc.UnitType.Rocket, d):
-                    if gc.can_replicate(unit.id, d):
-                        gc.replicate(unit.id, d)
+def workerLogic():
+    #TODO: find and gather resources
+    #TODO: be picky about building placement
+    #if there is something I can build nearby, do so
+    if unit.location.is_on_map():
+        nearby = gc.sense_nearby_units(unit.location.map_location(), 2)
+        for other in nearby:
+            if gc.can_build(unit.id, other.id):
+                gc.build(unit.id, other.id)
+                continue
 
-            if gc.karbonite() > bc.UnitType.Rocket.blueprint_cost() and gc.can_blueprint(unit.id, bc.UnitType.Rocket, d):
-                print("can build")
+    
+    #TODO: worker pathing, current random wander
+    d = random.choice(directions)
+    if gc.is_move_ready(unit.id) and gc.can_move(unit.id, d):
+        gc.move_robot(unit.id, d)
+    
+    #TODO: under 10 workers, replicate, otherwise build atleast 1 rocket and upto 5 factories
+    if numWorkers < 10:
+        if gc.can_replicate(unit.id, d):
+            gc.replicate(unit.id, d)
+    else:
+        if numRockets < 1 and rocketCount < 1:
+            if gc.karbonite() > bc.UnitType.Rocket.blueprint_cost() and gc.can_blueprint(unit.id, bc.UnitType.Rocket, d) and gc.research_info().get_level(bc.UnitType.Rocket) > 0:
+                #numRockets+=1#because we just built one, saves us making many at a time#makes numRockets local, breaks functionality
+                print("built rocket")
                 gc.blueprint(unit.id, bc.UnitType.Rocket, d)
-                m =1
-            """
-            # or, try to build a factory:
-            if gc.karbonite() > bc.UnitType.Factory.blueprint_cost() and gc.can_blueprint(unit.id, bc.UnitType.Factory, d):
-                gc.blueprint(unit.id, bc.UnitType.Factory, d)
-            # and if that fails, try to move
-            """
-            if gc.is_move_ready(unit.id) and gc.can_move(unit.id, d):
-                gc.move_robot(unit.id, d)
+        if gc.karbonite() > bc.UnitType.Factory.blueprint_cost() and gc.can_blueprint(unit.id, bc.UnitType.Factory, d) and numFactories < 5:
+            print("built factory")
+            gc.blueprint(unit.id, bc.UnitType.Factory, d)
+    
+    return
+
+def rocketLogic():
+    myx = unit.location.map_location().x
+    myy = unit.location.map_location().y
+    destination = bc.MapLocation(bc.Planet.Mars, myx, myy)
+    #TODO:wait until has someone in before launch
+    #TODO:make sure destination is a valid landing zone, currently keeps x,y from earth
+    if gc.can_launch_rocket(unit.id, destination):
+        gc.launch_rocket(unit.id, destination)
+    return
+
+def knightLogic():
+    #TODO: movement and attack logic
+    return
+
+def rangerLogic():
+    #TODO: movement and attack logic
+    return
+
+def mageLogic():
+    #TODO: movement and attack logic
+    return
+
+def healerLogic():
+    #TODO: movement and heal logic
+    return
 
 
+#turn loop
+while True:
+    try:
+        #unit counters
+        numFactories = factoryCount
+        numWorkers = workerCount
+        numRockets = rocketCount
+        numKnights = knightCount
+        numRangers = rangerCount
+        numMages = mageCount
+        numHealers = healerCount
+        factoryCount = 0
+        rocketCount = 0
+        workerCount = 0
+        knightCount = 0
+        rangerCount = 0
+        mageCount = 0
+        healerCount = 0
+        
+        #turn logic goes here,
+        #we seperate into a function for each unit type,
+        #and count the number of each unit we have
+        #so we can have build ratios and limits
+        for unit in gc.my_units():
+            if unit.unit_type == bc.UnitType.Factory:
+                factoryCount+=1
+                factoryLogic()
+                continue
+            if unit.unit_type == bc.UnitType.Rocket:
+                rocketCount+=1
+                rocketLogic()
+                continue
+            if unit.unit_type == bc.UnitType.Worker:
+                workerCount+=1
+                workerLogic()
+                continue
+            if unit.unit_type == bc.UnitType.Knight:
+                knightCount+=1
+                knightLogic()
+                continue
+            if unit.unit_type == bc.UnitType.Ranger:
+                rangerCount+=1
+                rangerLogic()
+                continue
+            if unit.unit_type == bc.UnitType.Mage:
+                mageCount+=1
+                mageLogic()
+                continue
+            if unit.unit_type == bc.UnitType.Healer:
+                healerCount+=1
+                healerLogic()
+                continue
     except Exception as e:
         print('Error:', e)
         # use this to show where the error was
@@ -94,4 +190,5 @@ while True:
     # it forces everything we've written this turn to be written to the manager.
     sys.stdout.flush()
     sys.stderr.flush()
+
 
