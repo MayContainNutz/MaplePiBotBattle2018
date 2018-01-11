@@ -13,8 +13,6 @@ directions = list(bc.Direction)
 
 #get the starting map
 myMap = gc.starting_map(gc.planet())
-#processes it into an int field
-pathFinding.pathPlanetMap(myMap)
 
 #get my team name
 my_team = gc.team()
@@ -40,9 +38,15 @@ for unit in myMap.initial_units:
         myStartingUnits += 1
         continue
 
+#processes the map into an int field
+myMap = pathFinding.pathPlanetMap(myMap)
 #enemyx,enemyy is the starting locations of(at least one) of the enemies bots
 #I am making the assumption that they stay near there
-
+start = time.time()
+myMap = pathFinding.pathMap(myMap, enemyx, enemyy)
+end = time.time()
+print("did the map thing in:")
+print(end-start)
 
 #print(myMap.initial_units)
 #unit counters init
@@ -63,20 +67,20 @@ healerCount = 0
 
 #logic for each unit type
 def factoryLogic():
-    m=1
     return
 
 def workerLogic():
     #TODO: find and gather resources
     #TODO: be picky about building placement
-    #if there is something I can build nearby, do so
-    if unit.location.is_on_map():
+    #if there is something I can build nearby, do so, or if i can garrison, do that
+    if unit.location.is_on_map() and unit.location.is_on_planet(bc.Planet.Earth):
         nearby = gc.sense_nearby_units(unit.location.map_location(), 2)
         for other in nearby:
             if gc.can_build(unit.id, other.id):
                 gc.build(unit.id, other.id)
                 continue
-
+            if gc.can_load(other.id, unit.id):
+                gc.load(other.id, unit.id)
     
     #TODO: worker pathing, current random wander
     d = random.choice(directions)
@@ -100,13 +104,23 @@ def workerLogic():
     return
 
 def rocketLogic():
+    if unit.location.is_on_planet(bc.Planet.Mars):
+        d = random.choice(directions)
+        if gc.can_unload(unit.id, d):
+            gc.unload(unit.id, d)
     myx = unit.location.map_location().x
     myy = unit.location.map_location().y
     destination = bc.MapLocation(bc.Planet.Mars, myx, myy)
     #TODO:wait until has someone in before launch
-    #TODO:make sure destination is a valid landing zone, currently keeps x,y from earth
-    if gc.can_launch_rocket(unit.id, destination):
-        gc.launch_rocket(unit.id, destination)
+    garrison = unit.structure_garrison()
+    garrisoned = 0
+    for thing in garrison:
+        garrisoned+=1
+    if garrisoned == unit.structure_max_capacity():
+        print("we takin off boys")
+        #TODO:make sure destination is a valid landing zone, currently keeps x,y from earth
+        if gc.can_launch_rocket(unit.id, destination):
+            gc.launch_rocket(unit.id, destination)
     return
 
 def knightLogic():
@@ -159,7 +173,8 @@ while True:
                 rocketLogic()
                 continue
             if unit.unit_type == bc.UnitType.Worker:
-                workerCount+=1
+                if unit.location.is_on_map():
+                    workerCount+=1
                 workerLogic()
                 continue
             if unit.unit_type == bc.UnitType.Knight:
