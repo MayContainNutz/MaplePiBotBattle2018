@@ -23,7 +23,7 @@ def pathPlanetMap(currentMap):
     return map    
             
 def pathMap(map, x, y):
-    #TODO: diagonal pathing
+    #TODO: test diagonal pathing
     #openlocs = [[1]*5 for i in range(5)]
 
     openlocs = []
@@ -33,20 +33,56 @@ def pathMap(map, x, y):
     edge = len(map)
     for loc in openlocs:
         i,j = loc
+        #orthagonal
+        #x-1,y
         if i-1 >=0:
-            if map[i-1][j] > unmapped and map[i-1][j] < impassable:
+            if map[i-1][j] == unmapped and map[i-1][j] != impassable:
                 map[i-1][j] = map[i][j] +1
                 openlocs.append([i-1,j])
+        #x,y+1
         if j+1 < edge:
-            if map[i][j+1] > unmapped and map[i][j+1] < impassable:
+            if map[i][j+1] == unmapped and map[i][j+1] != impassable:
                 map[i][j+1] = map[i][j] +1
                 openlocs.append([i,j+1])
+        #x+1,y
         if i+1 < edge:
-            if map[i+1][j] > unmapped and map[i+1][j] < impassable:
+            if map[i+1][j] == unmapped and map[i+1][j] != impassable:
                 map[i+1][j] = map[i][j] +1
                 openlocs.append([i+1,j])
+        #x,y-1
         if j-1 >= 0:
-            if map[i][j-1] > unmapped and map[i][j-1] < impassable:
+            if map[i][j-1] == unmapped and map[i][j-1] != impassable:
                 map[i][j-1] = map[i][j] +1
                 openlocs.append([i,j-1])
+        #diagonal
+        #x-1,y+1
+        if i-1 >=0 and j+1 < edge:
+            if map[i-1][j+1] == unmapped and map[i-1][j+1] != impassable:
+                map[i-1][j+1] = map[i][j] +1
+                openlocs.append([i-1,j+1])
+        #x+1,y+1
+        if i+1 < edge and j+1 < edge:
+            if map[i+1][j+1] == unmapped and map[i+1][j+1] != impassable:
+                map[i+1][j+1] = map[i][j] +1
+                openlocs.append([i+1,j+1])     
+        #x+1,y-1
+        if i+1 < edge and j-1 >=0:
+            if map[i+1][j-1] == unmapped and map[i+1][j-1] != impassable:
+                map[i+1][j-1] = map[i][j] +1
+                openlocs.append([i+1,j-1])
+        #x,y-1
+        if j-1 >= 0:
+            if map[i][j-1] == unmapped and map[i][j-1] != impassable:
+                map[i][j-1] = map[i][j] +1
+                openlocs.append([i,j-1])
+        #x-1,y-1
+        if j-1 >= 0 and i-1 >= 0:
+            if map[i-1][j-1] == unmapped and map[i-1][j-1] != impassable:
+                map[i-1][j-1] = map[i][j] +1
+                openlocs.append([i-1,j-1])
+    print(map)
     return map
+
+#given a map(witch should have pathfinding stuffs, and my current location which direction do i move
+def whereShouldIGo(map,x,y):
+    return x,y
