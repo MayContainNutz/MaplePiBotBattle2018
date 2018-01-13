@@ -49,7 +49,7 @@ myMap = pathFinding.pathPlanetMap(myMap)
 start = time.time()
 #TODO:map testing
 myMap = pathFinding.pathMap(myMap, enemyx, enemyy)
-reverseMap = pathFinding.pathMap(myMap, friendlyx, friendlyy)
+#reverseMap = pathFinding.pathMap(myMap, friendlyx, friendlyy)
 end = time.time()
 print("did the map thing in:")
 print(end-start)
@@ -73,23 +73,23 @@ healerCount = 0
 
 #logic for each unit type
 def factoryLogic():
-    if gc.can_produce_robot(unit.id, bc.UnitType.Ranger) and numRangers < 1:
+    #TODO: build order/rations ect
+    if gc.can_produce_robot(unit.id, bc.UnitType.Ranger) and numRangers < 5:
         gc.produce_robot(unit.id, bc.UnitType.Ranger)
     if len(unit.structure_garrison()) > 0:
-        #TODO: remove random
-        d = random.choice(directions)
-        if gc.can_unload(unit.id, d):
-            gc.unload(unit.id, d)
+        myDirections = pathFinding.whereShouldIGo(myMap, unit.location.map_location().x, unit.location.map_location().y)
+        for d in myDirections:
+            if gc.can_unload(unit.id, d):
+                gc.unload(unit.id, d)
     return
 
 def workerLogic():
     #If i am on a map
     if unit.location.is_on_map():
-        
         #get valid directions around me
-        myDirections = pathFinding.whereShouldIGo(reverseMap, unit.location.map_location().x, unit.location.map_location().y)
+        myDirections = pathFinding.whereShouldIGo(myMap, unit.location.map_location().x, unit.location.map_location().y)
         #find out what else is near me
-        nearby = gc.sense_nearby_units(unit.location.map_location(), 2)
+        nearby = gc.sense_nearby_units(unit.location.map_location(), 50)
         nearbyWorkers = 0
         for other in nearby:
             if gc.can_build(unit.id, other.id):#if its something I can build, then I should
@@ -98,7 +98,7 @@ def workerLogic():
             if other.unit_type == unit.unit_type and other.team == unit.team:#note, this unit shows up here, so +1
                 nearbyWorkers +=1#we cound the number of other workers we can see
         if nearbyWorkers < 3:#if there arent enough, we build more workers
-            for d in myDirections:#we want to buid the worker as far from the enemy as possible without moving
+            for d in reversed(myDirections):#we want to buid the worker as far from the enemy as possible without moving
                 if gc.can_replicate(unit.id, d):
                     gc.replicate(unit.id, d)
         if numFactories < 3:#if their arent many factories reporting in
@@ -115,25 +115,17 @@ def workerLogic():
                 #print("found dirt")
                 gc.harvest(unit.id, direction)
         #TODO:spread out to make sure we harvest all kryptonite on the map
-        if haveHarvested == 0 and nearbyWorkers > 4:
+        if haveHarvested == 0:
             #print("no dirt")
             for d in reversed(myDirections):
                 if gc.is_move_ready(unit.id) and gc.can_move(unit.id, d):
                     #print(d)
                     gc.move_robot(unit.id, d)
-        """
-        if haveHarvested == 0 and nearbyWorkers >=2:
-            for d in myDirections:
-                if gc.is_move_ready(unit.id) and gc.can_move(unit.id, d):
-                    #print(d)
-                    gc.move_robot(unit.id, d)
-        """
+        
         #basicly do a fill, if i cant see another worker, make one, gather any kryponite i can see, then move slowly out from my corner
     """
     #TODO: be picky about building placement
-    d = random.choice(directions)
-    #if there is something I can build nearby, do so, or if i can garrison, do that
-    
+
     if unit.location.is_on_map(): # and unit.location.is_on_planet(bc.Planet.Earth):
         nearby = gc.sense_nearby_units(unit.location.map_location(), 2)
         for other in nearby:
@@ -142,16 +134,6 @@ def workerLogic():
                 continue
             if gc.can_load(other.id, unit.id):
                 gc.load(other.id, unit.id)
-                
-    #only move if we have nothing to build or get into
-    #TODO: worker pathing, current random wander
-    if gc.is_move_ready(unit.id) and gc.can_move(unit.id, d):
-        gc.move_robot(unit.id, d)
-   
-    #TODO: under 10 workers, replicate, otherwise build atleast 1 rocket and upto 5 factories
-    if numWorkers < 2:
-        if gc.can_replicate(unit.id, d):
-            gc.replicate(unit.id, d)
     else:
         if numRockets < 1:
             if gc.karbonite() > bc.UnitType.Rocket.blueprint_cost() and gc.can_blueprint(unit.id, bc.UnitType.Rocket, d) and gc.research_info().get_level(bc.UnitType.Rocket) > 0:
@@ -188,25 +170,97 @@ def rocketLogic():
 
 def knightLogic():
     #TODO: movement and attack logic
-    return
-
-def rangerLogic():
-    #TODO: movement and attack logic
-    #print("i'm alive")
-    #TODO: move test, move straight to enemy
     if unit.location.is_on_map():
+        nearby = gc.sense_nearby_units(unit.location.map_location(), unit.vision_range)
         myDirections = pathFinding.whereShouldIGo(myMap, unit.location.map_location().x, unit.location.map_location().y)
+        knightsNearby = 0
+        for other in nearby:
+            if other.unit_type == unit.unit_type and other.team == unit.team:
+                knightsNearby+=1
+            if other.team != unit.team and gc.is_attack_ready(unit.id) and gc.can_attack(unit.id, other.id):
+                gc.attack(unit.id, other.id)
+            if other.team != unit.team:
+                me = unit.location.map_location()
+                them = other.location.map_location()
+                directionToThem = me.direction_to(them)
+                if gc.is_move_ready(unit.id) and gc.can_move(unit.id, directionToThem):
+                    gc.move_robot(unit.id, directionToThem)
         #print(myDirections)
         for d in myDirections:
             if gc.is_move_ready(unit.id) and gc.can_move(unit.id, d):
                 #print(d)
                 gc.move_robot(unit.id, d)
-   
+    return
+
+def rangerLogic():
+    #TODO: movement and attack logic
+    #print("i'm alive")
+    #TODO: dont move into my minimum range
+    if unit.location.is_on_map():
+        nearby = gc.sense_nearby_units(unit.location.map_location(), unit.vision_range)
+        myDirections = pathFinding.whereShouldIGo(myMap, unit.location.map_location().x, unit.location.map_location().y)
+        rangersNearby = 0
+        for other in nearby:
+            if other.unit_type == unit.unit_type and other.team == unit.team:
+                rangersNearby+=1
+            if other.team != unit.team and gc.is_attack_ready(unit.id) and gc.can_attack(unit.id, other.id):
+                gc.attack(unit.id, other.id)
+            if other.team != unit.team:
+                distanceTo = unit.location.map_location().distance_squared_to(other.location.map_location())
+                myRange = unit.attack_range()
+                if distanceTo < myRange:
+                    #move away
+                    for d in reversed(myDirections):
+                        if gc.is_move_ready(unit.id) and gc.can_move(unit.id,d):
+                            gc.move_robot(unit.id,d)
+                else:
+                    me = unit.location.map_location()
+                    them = other.location.map_location()
+                    directionToThem = me.direction_to(them)
+                    if gc.is_move_ready(unit.id) and gc.can_move(unit.id, directionToThem):
+                        gc.move_robot(unit.id, directionToThem)
+                #outside range, inside view range, move closer
+        #print(myDirections)
+        for d in myDirections:
+            if gc.is_move_ready(unit.id) and gc.can_move(unit.id, d):
+                #print(d)
+                gc.move_robot(unit.id, d)
+    #TODO: wait for friends
+    #TODO: once i dont have enemies, full map search
     #if there are 3? other rangers nearme, then move toward target
     return
 
 def mageLogic():
     #TODO: movement and attack logic
+    if unit.location.is_on_map():
+        nearby = gc.sense_nearby_units(unit.location.map_location(), unit.vision_range)
+        myDirections = pathFinding.whereShouldIGo(myMap, unit.location.map_location().x, unit.location.map_location().y)
+        magesNearby = 0
+        for other in nearby:
+            if other.unit_type == unit.unit_type and other.team == unit.team:
+                magesNearby+=1
+            if other.team != unit.team and gc.is_attack_ready(unit.id) and gc.can_attack(unit.id, other.id):
+                gc.attack(unit.id, other.id)
+            if other.team != unit.team:
+                distanceTo = unit.location.map_location().distance_squared_to(other.location.map_location())
+                myRange = unit.attack_range()
+                if distanceTo < myRange:
+                    #move away
+                    for d in reversed(myDirections):
+                        if gc.is_move_ready(unit.id) and gc.can_move(unit.id,d):
+                            gc.move_robot(unit.id,d)
+                else:
+                    me = unit.location.map_location()
+                    them = other.location.map_location()
+                    directionToThem = me.direction_to(them)
+                    if gc.is_move_ready(unit.id) and gc.can_move(unit.id, directionToThem):
+                        gc.move_robot(unit.id, directionToThem)
+                #outside range, inside view range, move closer
+        #print(myDirections)
+        for d in myDirections:
+            if gc.is_move_ready(unit.id) and gc.can_move(unit.id, d):
+                #print(d)
+                gc.move_robot(unit.id, d)
     return
 
 def healerLogic():

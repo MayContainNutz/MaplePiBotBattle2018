@@ -92,6 +92,11 @@ def pathMap(map, x, y):
 #given a map(witch should have pathfinding stuffs, and my current location which direction do i move
 #return list of directions, starting with best
 def whereShouldIGo(map,x,y):
+    furthest = len(map)
+    sortedLocations = moveMaxDistance(map,x,y,furthest)
+    return sortedLocations
+
+def moveMaxDistance(map,x,y,maxDist):
     sizeOf = len(map)-1
     x,y = sizeOf-y,sizeOf-x
     #print(x)
@@ -102,7 +107,7 @@ def whereShouldIGo(map,x,y):
     edge = len(map)
     for i in range(-1,2):
         for j in range(-1,2):
-            if x+i>=0 and y+j>=0 and x+i<edge and y+j<edge and map[x+i][y+j]<65000:
+            if x+i>=0 and y+j>=0 and x+i<edge and y+j<edge and map[x+i][y+j]<65000 and map[x+i][y+j]<maxDist:
                 nearbyLocations.append([i,j,map[x+i][y+j]])
     for i in range(1,len(nearbyLocations)):
         for j in range(1,len(nearbyLocations)):
