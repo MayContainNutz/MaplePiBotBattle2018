@@ -22,12 +22,36 @@ def pathPlanetMap(currentMap):
                 map[j][i] = unmapped
             else:
                 map[j][i] = impassable
-    return map    
-            
+    return map
+
+#takes one of the above processed maps for terrain,
+#and the original map it was generated from which has a few more details
+#like the locations of resources
+def miningMap(processedMap, generatedMap):
+    miningMap = 0
+    #TODO: generate resources map
+    return miningMap
+
+#takes a martian map and offers some good landing zones
+def landingZone(marsMap):
+    coOrds = []
+    mapSize = len(marsMap)
+    for x in range(0,mapSize):
+        for y in range(0,mapSize):
+            if marsMap[x][y] == unmapped:
+                marsMap[x][y] = 0
+                coOrds.append([mapSize-x,mapSize-y])#dont forget to put the co-ords back into game format
+                marsMap = mapFill(marsMap,x,y)
+                coOrds += landingZone(marsMap)
+    return coOrds
+
 def pathMap(map, x, y):
     #rearrange the co-ords given to match our internal structure
     sizeOf = len(map)-1
     x,y = sizeOf-y,sizeOf-x
+    return mapFill(map,x,y)
+
+def mapFill(map,x,y):
     #define our target destination
     map[x][y] = 0
     #make a list of locations we have rated, to be the source of further ratings

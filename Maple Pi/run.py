@@ -6,6 +6,8 @@ import time
 import pathFinding
 #TODO: remove random and use intelligent pathing
 import random
+totalTime = 0
+start = time.time()
 
 #build my environment
 gc = bc.GameController()
@@ -43,16 +45,33 @@ for unit in myMap.initial_units:
         continue
 
 #processes the map into an int field
-myMap = pathFinding.pathPlanetMap(myMap)
+thisMap = pathFinding.pathPlanetMap(myMap)
+resourcesMap = pathFinding.miningMap(thisMap,myMap)
 #enemyx,enemyy is the starting locations of(at least one) of the enemies bots
 #I am making the assumption that they stay near there
-start = time.time()
+#start = time.time()
+
+#if we are mars, figure out 1 safe landing spot for each wholy blocked off zone
+#and send it to earth
+#TODO: a 50*50 map with a full grid of 1*1 accessable squares may exceed the num of team array slots, should cap at ~10
+if gc.planet() == bc.Planet.Mars:
+    print("we on mars")
+    landingZones = pathFinding.landingZone(thisMap)
+    for zone in range(0,len(landingZones)):
+        gc.write_team_array(zone*2,landingZones[zone][0])
+        gc.write_team_array(zone*2+1,landingZones[zone][1])
+if gc.planet() == bc.Planet.Earth:
+    landingZones = []
 #TODO:map testing
-myMap = pathFinding.pathMap(myMap, enemyx, enemyy)
+#TODO: generalize map again, multiple destinations(one for each enemy bot, store the targets so i can recalculate the field every x turns?
+myMap = pathFinding.pathMap(thisMap, enemyx, enemyy)
+
 #reverseMap = pathFinding.pathMap(myMap, friendlyx, friendlyy)
-end = time.time()
-print("did the map thing in:")
-print(end-start)
+#end = time.time()
+#print("did the map thing in:")
+#print(end-start)
+
+
 
 #print(myMap.initial_units)
 #unit counters init
@@ -70,12 +89,16 @@ knightCount = 0
 rangerCount = 0
 mageCount = 0
 healerCount = 0
+end = time.time()
+totalTime+= end-start
 
 #logic for each unit type
 def factoryLogic():
     #TODO: build order/rations ect
-    if gc.can_produce_robot(unit.id, bc.UnitType.Ranger) and numRangers < 5:
+    if gc.can_produce_robot(unit.id, bc.UnitType.Ranger) and numRangers < (5*numHealers+5):#make this a ratio
         gc.produce_robot(unit.id, bc.UnitType.Ranger)
+    if gc.can_produce_robot(unit.id, bc.UnitType.Healer) and numRangers *5 > numHealers:
+        gc.produce_robot(unit.id, bc.UnitType.Healer)
     if len(unit.structure_garrison()) > 0:
         myDirections = pathFinding.whereShouldIGo(myMap, unit.location.map_location().x, unit.location.map_location().y)
         for d in myDirections:
@@ -85,7 +108,7 @@ def factoryLogic():
 
 def workerLogic():
     #If i am on a map
-    if unit.location.is_on_map():
+    if unit.location.is_on_map():#TODO: testing rockets and maps things, remove False
         #get valid directions around me
         myDirections = pathFinding.whereShouldIGo(myMap, unit.location.map_location().x, unit.location.map_location().y)
         #find out what else is near me
@@ -97,18 +120,42 @@ def workerLogic():
                 continue
             if other.unit_type == unit.unit_type and other.team == unit.team:#note, this unit shows up here, so +1
                 nearbyWorkers +=1#we cound the number of other workers we can see
-        if nearbyWorkers < 3:#if there arent enough, we build more workers
+            if other.unit_type == bc.UnitType.Rocket and other.team == unit.team:
+                print(len(other.structure_garrison()))
+                if len(other.structure_garrison()) == 0:
+                    #distanceTo = unit.location.map_location().distance_squared_to(other.location.map_location())
+                    #print(distanceTo)
+                    if gc.can_load(other.id, unit.id):
+                        gc.load(other.id, unit.id)
+                    else:
+                        me = unit.location.map_location()
+                        them = other.location.map_location()
+                        directionToThem = me.direction_to(them)
+                        if gc.is_move_ready(unit.id) and gc.can_move(unit.id, directionToThem):
+                            gc.move_robot(unit.id, directionToThem)
+        if numWorkers < 5:#if there arent enough, we build more workers
             for d in reversed(myDirections):#we want to buid the worker as far from the enemy as possible without moving
                 if gc.can_replicate(unit.id, d):
                     gc.replicate(unit.id, d)
-        if numFactories < 3:#if their arent many factories reporting in
+        #TODO:factories on again
+        """
+        if numFactories < 5:#if their arent many factories reporting in
                 if gc.karbonite() > bc.UnitType.Factory.blueprint_cost():#can we afford it
                     for d in myDirections:#furthest from the enemy again
                         if gc.can_blueprint(unit.id, bc.UnitType.Factory, d):#if the direction is valid for building
                             print("built factory")
                             gc.blueprint(unit.id, bc.UnitType.Factory, d)
+        """
+        #if numFactories > 3 and numWorkers > 5:
+        if numWorkers > 5:
+            if gc.karbonite() > bc.UnitType.Rocket.blueprint_cost() and gc.research_info().get_level(bc.UnitType.Rocket) > 0:
+                for d in reversed(myDirections):
+                    if gc.can_blueprint(unit.id, bc.UnitType.Rocket, d):
+                        gc.blueprint(unit.id, bc.UnitType.Rocket, d)
         #next we want to harvest all the kryponite, we also want to track if we have harvested any
+        #TODO: harvest and/or move at all
         haveHarvested = 0
+        
         for direction in myDirections:
             if gc.can_harvest(unit.id, direction):
                 haveHarvested = 1
@@ -149,22 +196,28 @@ def workerLogic():
 
 def rocketLogic():
     if unit.location.is_on_planet(bc.Planet.Mars):
-        d = random.choice(directions)
-        if gc.can_unload(unit.id, d):
-            gc.unload(unit.id, d)
+        myDirections = pathFinding.whereShouldIGo(myMap, unit.location.map_location().x, unit.location.map_location().y)
+        for d in myDirections:
+            if gc.can_unload(unit.id, d):
+                gc.unload(unit.id, d)
     elif unit.location.is_on_planet(bc.Planet.Earth):
-        myx = unit.location.map_location().x
-        myy = unit.location.map_location().y
-        destination = bc.MapLocation(bc.Planet.Mars, myx, myy)
         #TODO:wait until has someone in before launch
-        garrison = unit.structure_garrison()
-        garrisoned = 0
-        for thing in garrison:
-            garrisoned+=1
-        if garrisoned > 0:
-            #print("we takin off boys")
+        garrison = len(unit.structure_garrison())
+        #print("waitin on friends")
+        if garrison > 0:
+            if len(landingZones)>0:
+                myx = landingZones[0][0]
+                myy = landingZones[0][1]
+                print("im going where im told")
+            else:
+                myx = unit.location.map_location().x
+                myy = unit.location.map_location().y
+                print("we lazy")
+            destination = bc.MapLocation(bc.Planet.Mars, myx, myy)
+            print("we takin off boys")
             #TODO:make sure destination is a valid landing zone, currently keeps x,y from earth
             if gc.can_launch_rocket(unit.id, destination):
+                del landingZones[0]
                 gc.launch_rocket(unit.id, destination)
     return
 
@@ -225,6 +278,10 @@ def rangerLogic():
             if gc.is_move_ready(unit.id) and gc.can_move(unit.id, d):
                 #print(d)
                 gc.move_robot(unit.id, d)
+        #since I have moved, check again if there is anything to shoot
+        for other in nearby:
+            if other.team != unit.team and gc.is_attack_ready(unit.id) and gc.can_attack(unit.id, other.id):
+                gc.attack(unit.id, other.id)
     #TODO: wait for friends
     #TODO: once i dont have enemies, full map search
     #if there are 3? other rangers nearme, then move toward target
@@ -265,12 +322,38 @@ def mageLogic():
 
 def healerLogic():
     #TODO: movement and heal logic
+    if unit.location.is_on_map():
+        nearby = gc.sense_nearby_units(unit.location.map_location(), unit.vision_range)
+        for other in nearby:#find the nearest ranger and follow them
+            if other.unit_type == bc.UnitType.Ranger:
+                me = unit.location.map_location()
+                them = other.location.map_location()
+                directionToThem = me.direction_to(them)
+                if gc.is_move_ready(unit.id) and gc.can_move(unit.id, directionToThem):
+                    gc.move_robot(unit.id, directionToThem)
     return
 
 
 #turn loop
 while True:
     try:
+        start = time.time()
+        #TODO:testing communications delay and potential offloading work to mars
+        #communications delay is 50
+        if gc.planet() == bc.Planet.Earth and gc.round() == 52:
+            commArray = gc.get_team_array(bc.Planet.Mars)
+            for i in range(0,10,2):
+                x=commArray[i]
+                y=commArray[i+1]
+                landingZones.append([x,y]) 
+                #print("Recieved:", gc.round())
+            #print(landingZones)
+        """
+        if gc.planet() == bc.Planet.Mars:
+            index = 0
+            value = 1
+            gc.write_team_array(index,value)
+        """
         #print(gc.karbonite())#proves karbonite is shared accross planets
         #unit counters
         numFactories = factoryCount
@@ -322,11 +405,16 @@ while True:
                 healerCount+=1
                 healerLogic()
                 continue
+        #TODO: remove time keeping
+        end = time.time()
+        totalTime+= end-start
+        #print(totalTime)
     except Exception as e:
         print('Error:', e)
         # use this to show where the error was
         traceback.print_exc()
-
+    
+    
     # send the actions we've performed, and wait for our next turn.
     gc.next_turn()
 
